@@ -48,11 +48,15 @@ class Iiyama extends utils.Adapter {
     this.log.info("Starting iiyama adapter");
     const powerSaveMode = this.config.powerSaveMode || 1;
     if (this.config.connectionType === "tcp") {
-      if (powerSaveMode === 1 || powerSaveMode === 2) {
-        this.log.info(`Power Save Mode ${powerSaveMode}: TCP off when display off, WOL required for power-on`);
-      } else {
-        this.log.info(`Power Save Mode ${powerSaveMode}: TCP always on, power commands sent directly via TCP`);
-      }
+      const modeDescriptions = {
+        1: "WOL off, source input wake off - Cannot wake via network",
+        2: "WOL off, source input wake on - Wakes on source signal only, no network control",
+        3: "WOL on, source input wake off - Use WOL + power command",
+        4: "WOL on, source input wake on - Use WOL + power command (recommended)"
+      };
+      this.log.info(
+        `Power Save Mode ${powerSaveMode}: ${modeDescriptions[powerSaveMode] || "Unknown mode"}`
+      );
     }
     if (this.config.connectionType === "tcp") {
       if (!this.config.host || !this.config.port) {
@@ -389,8 +393,10 @@ class Iiyama extends utils.Adapter {
         this.setState("info.connection", true, true);
         this.setState("info.standby", false, true);
         if (!this.wolInProgress) {
-          this.startPolling();
-          this.pollStatus();
+          setTimeout(() => {
+            this.startPolling();
+            this.pollStatus();
+          }, 2e3);
         }
       });
       this.connection.on("disconnected", () => {
@@ -691,60 +697,79 @@ class Iiyama extends utils.Adapter {
   }
   /**
    * Set power state
-   * When powering on via TCP with Power Save Mode 1 or 2, sends a Wake-on-LAN packet first
-   * Mode 1/2: TCP is off when display is off, WOL is required to wake
-   * Mode 3/4: TCP stays on even when display is off, power command sent directly via TCP
+   * Power Save Mode behavior (as per display OSD):
+   * - Mode 1: WOL off, source input wake off, backlight off → cannot wake via network
+   * - Mode 2: WOL off, source input wake on, backlight off → wakes on source signal only
+   * - Mode 3: WOL on, source input wake off, backlight off → use WOL then send power command
+   * - Mode 4: WOL on, source input wake on, backlight off → use WOL + power command (recommended)
    */
   async setPower(powerOn) {
     if (!this.connection) return;
     const powerSaveMode = this.config.powerSaveMode || 1;
-    const needsWol = powerSaveMode === 1 || powerSaveMode === 2;
-    if (powerOn && this.config.connectionType === "tcp" && this.config.macAddress && needsWol) {
-      if (import_wake_on_lan.WakeOnLan.isValidMacAddress(this.config.macAddress)) {
-        this.wolInProgress = true;
-        this.stopPolling();
-        this.commandQueue = [];
-        try {
-          this.log.info(`Sending Wake-on-LAN packet to ${this.config.macAddress}`);
-          await import_wake_on_lan.WakeOnLan.wake(this.config.macAddress);
-          if (!this.connection.isConnected()) {
-            this.connection.setAutoReconnect(false);
-            this.connection.resetReconnectAttempts();
-            const maxRetries = 5;
-            const retryDelay = 3e3;
-            let connected = false;
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-              this.log.info(`Waiting for display to wake up... (attempt ${attempt}/${maxRetries})`);
-              await new Promise((resolve) => setTimeout(resolve, retryDelay));
-              try {
-                this.log.info("Attempting to reconnect to display...");
-                await this.connection.connect();
-                this.log.info("Reconnected to display");
-                connected = true;
-                break;
-              } catch (connError) {
-                if (attempt === maxRetries) {
-                  this.log.error(`Failed to reconnect after WOL: ${connError.message}`);
-                } else {
-                  this.log.debug(`Reconnect attempt ${attempt} failed, retrying...`);
+    const needsWol = powerSaveMode === 3 || powerSaveMode === 4;
+    const tcpStaysOn = powerSaveMode === 3 || powerSaveMode === 4;
+    if (powerOn && this.config.connectionType === "tcp") {
+      if (powerSaveMode === 1) {
+        this.log.warn(
+          `Power Save Mode ${powerSaveMode}: Cannot wake display via network. WOL and source input wake are both disabled. Please use IR remote/front panel button to wake the display, or change to Mode 3 or 4 (WOL enabled) in display settings.`
+        );
+        return;
+      }
+      if (powerSaveMode === 2) {
+        this.log.warn(
+          `Power Save Mode ${powerSaveMode}: Cannot wake display via network command. WOL is disabled. Display will only wake when it detects a source input signal. Change to Mode 3 or 4 (WOL enabled) for network wake capability.`
+        );
+        return;
+      }
+      if (needsWol && this.config.macAddress) {
+        if (import_wake_on_lan.WakeOnLan.isValidMacAddress(this.config.macAddress)) {
+          this.wolInProgress = true;
+          this.stopPolling();
+          this.commandQueue = [];
+          try {
+            const broadcastAddr = this.config.broadcastAddress || this.config.host.replace(/\.\d+$/, ".255");
+            this.log.info(`Sending Wake-on-LAN packets to ${this.config.macAddress} via broadcast ${broadcastAddr} (ports 9 and 7, 3 packets each)`);
+            await import_wake_on_lan.WakeOnLan.wake(this.config.macAddress, broadcastAddr);
+            this.log.info("Wake-on-LAN packets sent successfully");
+            if (!this.connection.isConnected()) {
+              this.connection.setAutoReconnect(false);
+              this.connection.resetReconnectAttempts();
+              const maxRetries = 5;
+              const retryDelay = 3e3;
+              let connected = false;
+              for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                this.log.info(`Waiting for display to wake up... (attempt ${attempt}/${maxRetries})`);
+                await new Promise((resolve) => setTimeout(resolve, retryDelay));
+                try {
+                  this.log.info("Attempting to reconnect to display...");
+                  await this.connection.connect();
+                  this.log.info("Reconnected to display");
+                  connected = true;
+                  break;
+                } catch (connError) {
+                  if (attempt === maxRetries) {
+                    this.log.error(`Failed to reconnect after WOL: ${connError.message}`);
+                  } else {
+                    this.log.debug(`Reconnect attempt ${attempt} failed, retrying...`);
+                  }
                 }
               }
+              this.connection.setAutoReconnect(true);
+              if (!connected) {
+                this.wolInProgress = false;
+                return;
+              }
+              this.log.info("Waiting for display to initialize...");
+              await new Promise((resolve) => setTimeout(resolve, 3e3));
             }
+          } catch (error) {
+            this.log.warn(`Failed to send WOL packet: ${error.message}`);
             this.connection.setAutoReconnect(true);
-            if (!connected) {
-              this.wolInProgress = false;
-              return;
-            }
-            this.log.info("Waiting for display to initialize...");
-            await new Promise((resolve) => setTimeout(resolve, 3e3));
+            this.wolInProgress = false;
           }
-        } catch (error) {
-          this.log.warn(`Failed to send WOL packet: ${error.message}`);
-          this.connection.setAutoReconnect(true);
-          this.wolInProgress = false;
+        } else {
+          this.log.warn(`Invalid MAC address configured: ${this.config.macAddress}`);
         }
-      } else {
-        this.log.warn(`Invalid MAC address configured: ${this.config.macAddress}`);
       }
     }
     this.queueCommand(async () => {
