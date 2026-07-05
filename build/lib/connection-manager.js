@@ -46,9 +46,12 @@ class ConnectionManager extends import_events.EventEmitter {
   buffer = Buffer.alloc(0);
   responseTimeout = null;
   reconnectTimeout = null;
+  standbyPollTimeout = null;
   reconnectAttempts = 0;
   maxReconnectAttempts = 10;
   reconnectDelay = 5e3;
+  standbyPollInterval = 3e4;
+  // Check every 30s if display came back
   autoReconnectEnabled = true;
   /**
    * Enable or disable auto-reconnect
@@ -93,6 +96,7 @@ class ConnectionManager extends import_events.EventEmitter {
     tcpClient.connect(this.config.port, this.config.host, () => {
       this.connected = true;
       this.reconnectAttempts = 0;
+      this.stopStandbyPolling();
       tcpClient.setKeepAlive(true, 1e4);
       this.emit("connected");
       resolve();
@@ -131,6 +135,7 @@ class ConnectionManager extends import_events.EventEmitter {
     serialClient.on("open", () => {
       this.connected = true;
       this.reconnectAttempts = 0;
+      this.stopStandbyPolling();
       this.emit("connected");
       resolve();
     });
@@ -208,11 +213,11 @@ class ConnectionManager extends import_events.EventEmitter {
         };
         this.once("response", onResponse);
         this.responseTimeout = setTimeout(() => {
-          this.log.error("Response timeout! No valid response received within 2000ms");
+          this.log.error("Response timeout! No valid response received within 5000ms");
           this.log.error(`Current buffer: ${this.buffer.toString("hex")} (${this.buffer.length} bytes)`);
           this.removeListener("response", onResponse);
           reject(new Error("Response timeout"));
-        }, 2e3);
+        }, 5e3);
       }
       this.log.debug(`Sending command: ${command.toString("hex")} (${command.length} bytes)`);
       if (this.config.type === "tcp") {
@@ -264,12 +269,40 @@ class ConnectionManager extends import_events.EventEmitter {
       }, this.reconnectDelay);
     } else if (this.autoReconnectEnabled) {
       this.emit("maxReconnectReached");
+      this.startStandbyPolling();
+    }
+  }
+  /**
+   * Start slow periodic reconnection attempts while display is in standby.
+   * This ensures the adapter reconnects when the display is turned on manually.
+   */
+  startStandbyPolling() {
+    this.stopStandbyPolling();
+    this.standbyPollTimeout = setInterval(() => {
+      if (this.connected) {
+        this.stopStandbyPolling();
+        return;
+      }
+      this.log.debug("Standby poll: checking if display is reachable...");
+      this.reconnectAttempts = 0;
+      this.connect().catch(() => {
+      });
+    }, this.standbyPollInterval);
+  }
+  /**
+   * Stop standby polling
+   */
+  stopStandbyPolling() {
+    if (this.standbyPollTimeout) {
+      clearInterval(this.standbyPollTimeout);
+      this.standbyPollTimeout = null;
     }
   }
   /**
    * Disconnect from display
    */
   disconnect() {
+    this.stopStandbyPolling();
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;

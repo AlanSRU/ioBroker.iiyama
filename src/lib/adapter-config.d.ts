@@ -12,6 +12,7 @@ declare global {
 			monitorId: number;
 			pollInterval: number;
 			macAddress: string;
+			broadcastAddress: string;
 			powerSaveMode: 1 | 2 | 3 | 4;
 		}
 	}

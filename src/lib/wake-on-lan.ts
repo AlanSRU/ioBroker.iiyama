@@ -6,30 +6,52 @@ import * as dgram from 'dgram';
 
 export class WakeOnLan {
 	/**
-	 * Send a Wake-on-LAN magic packet to wake up a device
+	 * Send Wake-on-LAN magic packets to wake up a device.
+	 * Sends multiple packets to both standard WOL ports for reliability.
 	 * @param macAddress MAC address in format AA:BB:CC:DD:EE:FF or AA-BB-CC-DD-EE-FF
 	 * @param broadcastAddress Broadcast address (default: 255.255.255.255)
-	 * @param port UDP port (default: 9)
 	 */
 	public static async wake(
 		macAddress: string,
 		broadcastAddress = '255.255.255.255',
-		port = 9,
 	): Promise<void> {
 		const macBuffer = this.parseMacAddress(macAddress);
 		const magicPacket = this.createMagicPacket(macBuffer);
 
+		// Send to both standard WOL ports, 3 packets each, for reliability
+		const ports = [9, 7];
+		const sendCount = 3;
+		const delayMs = 100;
+
+		for (const port of ports) {
+			for (let i = 0; i < sendCount; i++) {
+				await this.sendPacket(magicPacket, broadcastAddress, port);
+				if (i < sendCount - 1) {
+					await new Promise((resolve) => setTimeout(resolve, delayMs));
+				}
+			}
+		}
+	}
+
+	/**
+	 * Send a single UDP broadcast packet
+	 */
+	private static async sendPacket(
+		packet: Buffer,
+		broadcastAddress: string,
+		port: number,
+	): Promise<void> {
 		return new Promise((resolve, reject) => {
-			const socket = dgram.createSocket('udp4');
+			const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
 			socket.on('error', (err) => {
 				socket.close();
 				reject(err);
 			});
 
-			socket.bind(() => {
+			socket.bind(0, '0.0.0.0', () => {
 				socket.setBroadcast(true);
-				socket.send(magicPacket, 0, magicPacket.length, port, broadcastAddress, (err) => {
+				socket.send(packet, 0, packet.length, port, broadcastAddress, (err) => {
 					socket.close();
 					if (err) {
 						reject(err);

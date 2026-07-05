@@ -62,6 +62,24 @@ Control iiyama ProLite displays via RS232 serial or TCP/IP (LAN) connection usin
 
 - **Monitor ID**: The ID configured on the display (1-255). Default is 1.
 - **Poll Interval**: How often to update the display status (5-300 seconds). Default is 30 seconds.
+- **Power Save Mode**: The power saving mode configured on your display (1-4). This affects how the display can be controlled when powered off:
+  - **Mode 1**: WOL Off, source input wake off, backlight off
+    - TCP connection drops when display is off
+    - Cannot wake via network (WOL disabled)
+    - Must use IR remote or front panel button to wake
+  - **Mode 2**: WOL Off, source input wake on, backlight off
+    - TCP connection drops when display is off
+    - Cannot wake via network (WOL disabled)
+    - Can wake automatically when HDMI source signal detected
+  - **Mode 3**: WOL On, source input wake off
+    - TCP connection remains active when display is off
+    - Can wake via Wake-on-LAN (requires MAC address configuration)
+    - Use this mode if you want to wake the display via network
+  - **Mode 4**: WOL Off, source input wake on (**recommended for network control**)
+    - TCP connection remains active when display is off
+    - Power commands can be sent directly via TCP (no WOL needed)
+    - Can also wake automatically when HDMI source signal detected
+- **MAC Address** (for Mode 3 only): The MAC address of the display's network interface, required for Wake-on-LAN functionality
 
 ## Usage
 
@@ -150,7 +168,10 @@ This adapter implements the iiyama RS232 Serial Interface Communication Protocol
    - Verify baud rate (9600 or 115200 for B1 series)
    - Check serial port permissions on Linux: `sudo usermod -a -G dialout iobroker`
 5. **TCP connection issues**:
-   - Ensure display's "Power Save" setting is Mode 3 or Mode 4 for network wake-up
+   - For network power control, configure display to Power Save Mode 3 or Mode 4
+   - Mode 1 or 2: TCP connection drops when display is off - cannot wake via network
+   - Mode 3: Requires Wake-on-LAN - configure MAC address in adapter settings
+   - Mode 4: Recommended - TCP stays active, power commands work directly
    - Check firewall settings
 
 ### Commands Not Working

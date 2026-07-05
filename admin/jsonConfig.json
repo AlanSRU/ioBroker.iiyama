@@ -32,10 +32,17 @@
 		},
 		"macAddress": {
 			"type": "text",
-			"label": "MAC Address (for Wake-on-LAN)",
+			"label": "MAC Address",
 			"placeholder": "AA:BB:CC:DD:EE:FF",
 			"hidden": "data.connectionType !== 'tcp'",
-			"help": "MAC address of the display for Wake-on-LAN when powering on from standby"
+			"help": "Required for Power Save Mode 3 and 4 (Wake-on-LAN enabled)."
+		},
+		"broadcastAddress": {
+			"type": "text",
+			"label": "WOL Broadcast Address",
+			"placeholder": "e.g. 192.168.1.255",
+			"hidden": "data.connectionType !== 'tcp'",
+			"help": "Subnet broadcast address for WOL packets. If empty, derived from host IP (e.g. 192.168.1.100 → 192.168.1.255)."
 		},
 		"powerSaveMode": {
 			"type": "select",
@@ -44,23 +51,23 @@
 			"newLine": true,
 			"options": [
 				{
-					"label": "Mode 1: TCP off when display off, WOL enabled",
+					"label": "Mode 1: WOL off, source input wake off (cannot wake via network)",
 					"value": 1
 				},
 				{
-					"label": "Mode 2: TCP off when display off, WOL enabled, auto on/off",
+					"label": "Mode 2: WOL off, source input wake on (wakes on source signal only)",
 					"value": 2
 				},
 				{
-					"label": "Mode 3: TCP always on, WOL disabled, auto on/off",
+					"label": "Mode 3: WOL on, source input wake off (requires MAC address)",
 					"value": 3
 				},
 				{
-					"label": "Mode 4: TCP always on, WOL disabled",
+					"label": "Mode 4: WOL on, source input wake on (recommended, requires MAC address)",
 					"value": 4
 				}
 			],
-			"help": "Must match the Power Save mode configured on the display. Mode 1/2 require WOL to wake display, Mode 3/4 use TCP commands."
+			"help": "Must match the Power Save mode on your display. Mode 1/2: WOL disabled, no network wake. Mode 3/4: WOL enabled, requires MAC address."
 		},
 		"serialPort": {
 			"type": "text",
