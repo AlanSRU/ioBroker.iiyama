@@ -88,6 +88,22 @@ class Iiyama extends utils.Adapter {
 	 * Create all state objects
 	 */
 	private async createStateObjects(): Promise<void> {
+		// Channel objects, so every state has an intermediate parent object (repochecker E3009)
+		const channels: Record<string, string> = {
+			info: 'Information',
+			volume: 'Volume',
+			video: 'Video settings',
+			audio: 'Audio settings',
+			commands: 'Commands',
+		};
+		for (const [id, name] of Object.entries(channels)) {
+			await this.setObjectNotExistsAsync(id, {
+				type: 'channel',
+				common: { name },
+				native: {},
+			});
+		}
+
 		// Connection state - tracks actual device connectivity
 		await this.setObjectNotExistsAsync('info.connection', {
 			type: 'state',
