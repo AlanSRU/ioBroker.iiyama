@@ -88,6 +88,20 @@ class Iiyama extends utils.Adapter {
    * Create all state objects
    */
   async createStateObjects() {
+    const channels = {
+      info: "Information",
+      volume: "Volume",
+      video: "Video settings",
+      audio: "Audio settings",
+      commands: "Commands"
+    };
+    for (const [id, name] of Object.entries(channels)) {
+      await this.setObjectNotExistsAsync(id, {
+        type: "channel",
+        common: { name },
+        native: {}
+      });
+    }
     await this.setObjectNotExistsAsync("info.connection", {
       type: "state",
       common: {
