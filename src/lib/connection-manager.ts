@@ -40,10 +40,12 @@ export class ConnectionManager extends EventEmitter {
 	private buffer = Buffer.alloc(0);
 	private responseTimeout: ioBroker.Timeout | undefined;
 	private reconnectTimeout: ioBroker.Timeout | undefined;
+	private connectTimeout: ioBroker.Timeout | undefined;
 	private standbyPollTimeout: ioBroker.Interval | undefined;
 	private reconnectAttempts = 0;
 	private readonly maxReconnectAttempts = 10;
 	private readonly reconnectDelay = 5000;
+	private readonly connectTimeoutMs = 10000; // Reject a TCP connect that hangs (unreachable host)
 	private readonly standbyPollInterval = 30000; // Check every 30s if display came back
 	private autoReconnectEnabled = true;
 	private readonly log: Logger;
@@ -107,7 +109,27 @@ export class ConnectionManager extends EventEmitter {
 		this.client = new net.Socket();
 		const tcpClient = this.client;
 
+		// Guard against a connect that hangs (host unreachable but not refusing):
+		// net.Socket.connect() otherwise relies on the OS default TCP timeout (20-130s),
+		// making the adapter appear frozen. Reject after connectTimeoutMs instead.
+		let settled = false;
+		this.connectTimeout = this.adapter.setTimeout(() => {
+			this.connectTimeout = undefined;
+			if (this.connected || settled) {
+				return;
+			}
+			settled = true;
+			this.log.debug(`TCP connect timeout after ${this.connectTimeoutMs}ms (host may be off/unreachable)`);
+			tcpClient.destroy();
+			reject(new Error('ETIMEDOUT: TCP connection timed out'));
+		}, this.connectTimeoutMs);
+
 		tcpClient.connect(this.config.port, this.config.host, () => {
+			if (this.connectTimeout) {
+				this.adapter.clearTimeout(this.connectTimeout);
+				this.connectTimeout = undefined;
+			}
+			settled = true;
 			this.connected = true;
 			this.reconnectAttempts = 0;
 			this.stopStandbyPolling();
@@ -124,8 +146,13 @@ export class ConnectionManager extends EventEmitter {
 		});
 
 		tcpClient.on('error', (error: Error) => {
+			if (this.connectTimeout) {
+				this.adapter.clearTimeout(this.connectTimeout);
+				this.connectTimeout = undefined;
+			}
 			this.emit('error', error);
-			if (!this.connected) {
+			if (!this.connected && !settled) {
+				settled = true;
 				reject(error);
 			}
 		});
@@ -395,6 +422,11 @@ export class ConnectionManager extends EventEmitter {
 		if (this.reconnectTimeout) {
 			this.adapter.clearTimeout(this.reconnectTimeout);
 			this.reconnectTimeout = undefined;
+		}
+
+		if (this.connectTimeout) {
+			this.adapter.clearTimeout(this.connectTimeout);
+			this.connectTimeout = undefined;
 		}
 
 		if (this.responseTimeout) {

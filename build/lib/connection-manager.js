@@ -47,10 +47,13 @@ class ConnectionManager extends import_node_events.EventEmitter {
   buffer = Buffer.alloc(0);
   responseTimeout;
   reconnectTimeout;
+  connectTimeout;
   standbyPollTimeout;
   reconnectAttempts = 0;
   maxReconnectAttempts = 10;
   reconnectDelay = 5e3;
+  connectTimeoutMs = 1e4;
+  // Reject a TCP connect that hangs (unreachable host)
   standbyPollInterval = 3e4;
   // Check every 30s if display came back
   autoReconnectEnabled = true;
@@ -100,7 +103,23 @@ class ConnectionManager extends import_node_events.EventEmitter {
     }
     this.client = new net.Socket();
     const tcpClient = this.client;
+    let settled = false;
+    this.connectTimeout = this.adapter.setTimeout(() => {
+      this.connectTimeout = void 0;
+      if (this.connected || settled) {
+        return;
+      }
+      settled = true;
+      this.log.debug(`TCP connect timeout after ${this.connectTimeoutMs}ms (host may be off/unreachable)`);
+      tcpClient.destroy();
+      reject(new Error("ETIMEDOUT: TCP connection timed out"));
+    }, this.connectTimeoutMs);
     tcpClient.connect(this.config.port, this.config.host, () => {
+      if (this.connectTimeout) {
+        this.adapter.clearTimeout(this.connectTimeout);
+        this.connectTimeout = void 0;
+      }
+      settled = true;
       this.connected = true;
       this.reconnectAttempts = 0;
       this.stopStandbyPolling();
@@ -112,8 +131,13 @@ class ConnectionManager extends import_node_events.EventEmitter {
       this.handleData(data);
     });
     tcpClient.on("error", (error) => {
+      if (this.connectTimeout) {
+        this.adapter.clearTimeout(this.connectTimeout);
+        this.connectTimeout = void 0;
+      }
       this.emit("error", error);
-      if (!this.connected) {
+      if (!this.connected && !settled) {
+        settled = true;
         reject(error);
       }
     });
@@ -323,6 +347,10 @@ class ConnectionManager extends import_node_events.EventEmitter {
     if (this.reconnectTimeout) {
       this.adapter.clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = void 0;
+    }
+    if (this.connectTimeout) {
+      this.adapter.clearTimeout(this.connectTimeout);
+      this.connectTimeout = void 0;
     }
     if (this.responseTimeout) {
       this.adapter.clearTimeout(this.responseTimeout);

@@ -3,18 +3,27 @@
  * Implements the iiyama ProLite communication protocol
  */
 
+/**
+ * iiyama ProLite command codes from the RS232/LAN protocol spec.
+ *
+ * Entries marked "reserved" are defined for protocol completeness but are not
+ * yet wired to an adapter state. Their command builders may exist in
+ * {@link IiyamaProtocol} (e.g. IR/keypad lock, language, pixel shift); they are
+ * kept so the corresponding features can be exposed later without re-deriving
+ * the protocol. Remove them only if the feature is dropped for good.
+ */
 export enum CommandCode {
-	// Platform and version
+	// Platform and version (reserved for future use)
 	PLATFORM_VERSION = 0xa2,
 	MODEL_NUMBER_FW = 0xa1,
 
 	// Power control
 	POWER_STATE_GET = 0x19,
 	POWER_STATE_SET = 0x18,
-	POWER_COLD_START_GET = 0xa4,
-	POWER_COLD_START_SET = 0xa3,
+	POWER_COLD_START_GET = 0xa4, // reserved for future use
+	POWER_COLD_START_SET = 0xa3, // reserved for future use
 
-	// Lock functions
+	// Lock functions (reserved for future use)
 	IR_LOCK_GET = 0x1d,
 	IR_LOCK_SET = 0x1c,
 	KEYPAD_LOCK_GET = 0x1b,
@@ -29,15 +38,15 @@ export enum CommandCode {
 	VIDEO_PARAMS_SET = 0x32,
 	COLOR_TEMP_GET = 0x35,
 	COLOR_TEMP_SET = 0x34,
-	COLOR_PARAMS_GET = 0x37,
-	COLOR_PARAMS_SET = 0x36,
+	COLOR_PARAMS_GET = 0x37, // reserved for future use
+	COLOR_PARAMS_SET = 0x36, // reserved for future use
 	PICTURE_FORMAT_GET = 0x3b,
 	PICTURE_FORMAT_SET = 0x3a,
 
 	// Audio
 	VOLUME_GET = 0x45,
 	VOLUME_SET = 0x44,
-	VOLUME_LIMITS_SET = 0xb8,
+	VOLUME_LIMITS_SET = 0xb8, // reserved for future use
 	AUDIO_PARAMS_GET = 0x43,
 	AUDIO_PARAMS_SET = 0x42,
 
@@ -46,42 +55,51 @@ export enum CommandCode {
 	AUTO_ADJUST = 0x70,
 	SERIAL_CODE_GET = 0x15,
 
-	// Scheduling
+	// Scheduling (reserved for future use)
 	SCHEDULING_GET = 0x5b,
 	SCHEDULING_SET = 0x5a,
 
-	// Language
+	// Language (reserved for future use)
 	LANGUAGE_GET = 0xc0,
 	LANGUAGE_SET = 0xc1,
 
-	// Pixel Shift
+	// Pixel Shift (reserved for future use)
 	PIXEL_SHIFT_GET = 0xb1,
 	PIXEL_SHIFT_SET = 0xb2,
 }
 
+/**
+ * Full input-source table from the protocol spec.
+ *
+ * Only the sources present on typical ProLite panels are exposed in the
+ * `inputSource` state's `states` map (see main.ts). The remaining entries
+ * (NULL, VIDEO, S_VIDEO, COMPONENT, card slots, media/browser apps, …) are
+ * reserved: they are kept so `parseInputSource()` can still name a source the
+ * display reports and so they can be surfaced on models that support them.
+ */
 export enum InputSource {
-	NULL = 0x00,
-	VIDEO = 0x01,
-	S_VIDEO = 0x02,
-	COMPONENT = 0x03,
+	NULL = 0x00, // reserved
+	VIDEO = 0x01, // reserved
+	S_VIDEO = 0x02, // reserved
+	COMPONENT = 0x03, // reserved
 	VGA = 0x05,
 	HDMI_2 = 0x06,
 	DISPLAY_PORT_2 = 0x07,
 	USB_2 = 0x08,
-	CARD_DVI_D = 0x09,
+	CARD_DVI_D = 0x09, // reserved
 	DISPLAY_PORT = 0x0a,
-	CARD_OPS = 0x0b,
+	CARD_OPS = 0x0b, // reserved
 	USB = 0x0c,
 	HDMI = 0x0d,
 	DVI_D = 0x0e,
 	HDMI_3 = 0x0f,
-	BROWSER = 0x10,
-	SMARTCMS = 0x11,
-	DMS = 0x12,
-	INTERNAL_STORAGE = 0x13,
-	MEDIA_PLAYER = 0x16,
-	PDF_PLAYER = 0x17,
-	CUSTOM = 0x18,
+	BROWSER = 0x10, // reserved
+	SMARTCMS = 0x11, // reserved
+	DMS = 0x12, // reserved
+	INTERNAL_STORAGE = 0x13, // reserved
+	MEDIA_PLAYER = 0x16, // reserved
+	PDF_PLAYER = 0x17, // reserved
+	CUSTOM = 0x18, // reserved
 	HDMI_4 = 0x19,
 }
 

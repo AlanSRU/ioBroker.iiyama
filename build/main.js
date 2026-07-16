@@ -198,7 +198,7 @@ class Iiyama extends utils.Adapter {
         name: "Brightness",
         type: "number",
         def: 0,
-        role: "level",
+        role: "level.dimmer",
         read: true,
         write: true,
         min: 0,
@@ -500,6 +500,10 @@ class Iiyama extends utils.Adapter {
     if (!this.connection || !this.connection.isConnected()) {
       return;
     }
+    if (this.commandQueue.length > 0 || this.processingQueue) {
+      this.log.debug("Skipping poll cycle: previous cycle still processing");
+      return;
+    }
     try {
       this.queueCommand(() => this.getPowerState());
       this.queueCommand(() => this.getCurrentSource());
@@ -759,6 +763,23 @@ class Iiyama extends utils.Adapter {
     }
   }
   /**
+   * Redact a MAC address for logging, keeping only the last three octets.
+   * MAC addresses can be treated as personal data in some jurisdictions, so we
+   * avoid writing them to the log in full. e.g. AA:BB:CC:DD:EE:FF -> **:**:**:DD:EE:FF
+   *
+   * @param mac - MAC address (any common separator) or undefined
+   */
+  redactMac(mac) {
+    if (!mac) {
+      return "(none)";
+    }
+    const octets = mac.split(/[:-]/);
+    if (octets.length !== 6) {
+      return "**:**:**:**:**:**";
+    }
+    return ["**", "**", "**", octets[3], octets[4], octets[5]].join(":");
+  }
+  /**
    * Set power state
    * Power Save Mode behavior (as per display OSD):
    * - Mode 1: WOL off, source input wake off, backlight off → cannot wake via network
@@ -795,7 +816,7 @@ class Iiyama extends utils.Adapter {
           try {
             const broadcastAddr = this.config.broadcastAddress || this.config.host.replace(/\.\d+$/, ".255");
             this.log.info(
-              `Sending Wake-on-LAN packets to ${this.config.macAddress} via broadcast ${broadcastAddr} (ports 9 and 7, 3 packets each)`
+              `Sending Wake-on-LAN packets to ${this.redactMac(this.config.macAddress)} via broadcast ${broadcastAddr} (ports 9 and 7, 3 packets each)`
             );
             await import_wake_on_lan.WakeOnLan.wake(this.config.macAddress, broadcastAddr);
             this.log.info("Wake-on-LAN packets sent successfully");
@@ -838,7 +859,7 @@ class Iiyama extends utils.Adapter {
             this.wolInProgress = false;
           }
         } else {
-          this.log.warn(`Invalid MAC address configured: ${this.config.macAddress}`);
+          this.log.warn(`Invalid MAC address configured: ${this.redactMac(this.config.macAddress)}`);
         }
       }
     }

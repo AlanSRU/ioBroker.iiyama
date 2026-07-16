@@ -110,11 +110,12 @@ Control [iiyama ProLite](https://iiyama.com/gl_en/products/) professional displa
 - `video.pictureFormat` - Picture format/aspect ratio
 
 #### Audio Settings
-- `audio.treble` - Treble level (0-10)
-- `audio.bass` - Bass level (0-10)
+- `audio.treble` - Treble level (0-100)
+- `audio.bass` - Bass level (0-100)
 
 #### Information (Read-only)
 - `info.connection` - Connection status
+- `info.standby` - Display is in standby / unreachable while the adapter keeps running
 - `info.operatingHours` - Total operating hours
 - `info.serialCode` - Display serial number
 
@@ -188,6 +189,14 @@ community project and is not affiliated with, endorsed by, or supported by iiyam
 	Placeholder for the next version (at the beginning of the line):
 	### __WORK IN PROGRESS__
 -->
+### __WORK IN PROGRESS__
+* (Alan Paris) Removed the manufacturer protocol PDF from the repository and its git history
+* (Alan Paris) Added a 10 s TCP connection timeout so an unreachable display no longer hangs the connect
+* (Alan Paris) Redacted MAC addresses in log output (only the last three octets are shown)
+* (Alan Paris) Changed the brightness state role to `level.dimmer`
+* (Alan Paris) Poll cycles are now skipped while the previous cycle is still processing, preventing command-queue backlog
+* (Alan Paris) Documented reserved protocol command/input-source codes that are not yet exposed as states
+
 ### 0.1.3 (2026-07-06)
 * (Alan Paris) Updated serialport dependency to 13.0.0
 
